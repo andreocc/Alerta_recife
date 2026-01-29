@@ -1,0 +1,7 @@
+{
+  "name": "Alerta Recife: Sistema de Prevenção de Alagamentos",
+  "description": "Uma ferramenta inteligente para monitorar o risco de alagamentos em Recife, cruzando dados de tábua de marés e previsão meteorológica em tempo real.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
