@@ -8,8 +8,23 @@ export interface TideData {
 export interface WeatherData {
   time: string;
   temp: number;
-  precipitation: number; // probability in %
+  precipitation: number;
   condition: string;
+}
+
+export interface RiskZone {
+  id: string;
+  name: string;
+  level: 'low' | 'medium' | 'high' | 'critical';
+  polygon: [number, number][];
+  description: string;
+}
+
+export interface TimelineEvent {
+  hour: string;
+  riskType: 'rain' | 'tide' | 'combined';
+  intensity: number; // 0-100
+  label: string;
 }
 
 export interface GroundingSource {
@@ -26,6 +41,7 @@ export interface FloodHistory {
   severity: 'moderate' | 'severe';
   lat: number;
   lng: number;
+  details?: string;
 }
 
 export interface RiskAnalysis {
@@ -34,15 +50,16 @@ export interface RiskAnalysis {
   message: string;
   recommendations: string[];
   isSpecificWarningTriggered: boolean;
+  affectedNeighborhoods: string[];
   liveWeather: WeatherData[];
   liveTides: TideData[];
   sources: GroundingSource[];
   history: FloodHistory[];
+  riskZones: RiskZone[];
+  timeline: TimelineEvent[];
+  lastUpdate: string;
 }
 
-export enum AlertLevel {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-  CRITICAL = 'critical'
+export interface UserPreferences {
+  savedAreas: { name: string; lat: number; lng: number }[];
 }
