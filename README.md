@@ -1,20 +1,42 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# Deploy no Cloudflare (Alerta Recife)
 
-This contains everything you need to run your app locally.
+## Pré-requisitos
+- Conta Cloudflare
+- Node.js instalado
+- Wrangler CLI: `npm install -g wrangler`
 
-View your app in AI Studio: https://ai.studio/apps/drive/15tXrmq_TmJqFx6Ge-F5MQ6jZeNldVBBl
+## 1. Configurar Worker (Backend Proxy)
 
-## Run Locally
+```bash
+cd worker
+npm install
+wrangler login
+wrangler secret put GEMINI_API_KEY
+# Cole sua API key do Google AI Studio (obtenha em ai.google.dev)
+wrangler deploy
+```
 
-**Prerequisites:**  Node.js
+Anote a URL do Worker gerada (ex: `https://alerta-recife-api.subdominio.workers.dev`).
 
+## 2. Configurar Pages (Frontend)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+cp .env.example .env
+# Edite .env com a URL do Worker obtida no passo anterior
+npm install
+npm run build
+wrangler pages deploy dist --project-name=alerta-recife
+```
+
+## 3. Variáveis de Ambiente no Painel Cloudflare
+
+### No Cloudflare Pages:
+1. Vá em **Settings > Environment Variables**.
+2. Adicione: `VITE_WORKER_API_URL` com a URL do seu Worker.
+3. Realize um novo deploy.
+
+### No Cloudflare Workers:
+1. Vá em **Settings > Variables**.
+2. Adicione: `FRONTEND_URL` com a URL do seu site Pages para permitir CORS.
+3. Clique em **Save and Deploy**.
