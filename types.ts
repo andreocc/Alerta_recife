@@ -58,6 +58,7 @@ export interface RiskAnalysis {
   riskZones: RiskZone[];
   timeline: TimelineEvent[];
   lastUpdate: string;
+  isStale?: boolean; // Indica que o dado é do cache após falha na atualização
 }
 
 export interface UserPreferences {

@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  Waves, MapPin, Clock, AlertCircle, RefreshCw, Bell, X, 
-  Search, Maximize2, Phone, Info, Star, ChevronRight, Navigation, ShieldAlert,
-  // Added missing icons used in footer
-  CloudRain, Shield
+  Waves, MapPin, Clock, AlertCircle, RefreshCw, X, 
+  Search, Info, Star, ChevronRight, Navigation, ShieldAlert,
+  CloudRain, Shield, Database, AlertTriangle, Home, History as HistoryIcon, 
+  Settings, Share2, LocateFixed, Maximize
 } from 'lucide-react';
 import { TideChart } from './components/TideChart';
 import { StatusCard } from './components/StatusCard';
@@ -19,22 +19,28 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<FloodHistory | RiskZone | null>(null);
+  const [activeTab, setActiveTab] = useState<'home' | 'map' | 'history' | 'settings'>('home');
   const [preferences, setPreferences] = useState<UserPreferences>({ savedAreas: [] });
   const [showGuide, setShowGuide] = useState(false);
 
+  // Efeito de vibração para alertas críticos
   useEffect(() => {
-    const saved = localStorage.getItem('recife_pref');
-    if (saved) setPreferences(JSON.parse(saved));
-  }, []);
+    if (analysis?.level === 'critical' && 'vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200]);
+    }
+  }, [analysis]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (force: boolean = false) => {
     setLoading(true);
     setError(null);
     try {
-      const result = await analyzeRisk();
+      const result = await analyzeRisk(force);
       setAnalysis(result);
+      if (result.isStale) {
+        setError("Usando dados de cache. Verifique sua conexão.");
+      }
     } catch (err) {
-      setError("Erro ao obter dados reais. Tente atualizar.");
+      setError("Erro ao carregar dados. Tente atualizar.");
     } finally {
       setLoading(false);
     }
@@ -42,210 +48,241 @@ const App: React.FC = () => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const toggleFavorite = (areaName: string) => {
-     // Simulação de salvar área de interesse
-     console.log("Saving area:", areaName);
+  const handleShare = async () => {
+    if (navigator.share && analysis) {
+      try {
+        await navigator.share({
+          title: 'Alerta Recife: Risco de Alagamento',
+          text: `Status em Recife: ${analysis.level.toUpperCase()}. ${analysis.title}`,
+          url: window.location.href,
+        });
+      } catch (err) {
+        console.log("Error sharing", err);
+      }
+    }
   };
 
+  const navItems = [
+    { id: 'home', icon: Home, label: 'Início' },
+    { id: 'map', icon: MapPin, label: 'Mapa' },
+    { id: 'history', icon: HistoryIcon, label: 'Histórico' },
+    { id: 'settings', icon: Settings, label: 'Ajustes' },
+  ];
+
   return (
-    <div className="min-h-screen pb-10 bg-slate-50 flex flex-col">
-      {/* Alerta Crítico Superior */}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors duration-300">
+      
+      {/* Sticky Top Action Bar (Mobile Only - Critical) */}
       {analysis?.level === 'critical' && (
-        <div className="bg-red-600 text-white animate-pulse sticky top-0 z-50 shadow-lg">
-          <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <ShieldAlert size={20} />
-              <div className="text-sm">
-                <p className="font-black uppercase tracking-tight">Risco Crítico de Alagamento</p>
-                <p className="text-xs font-medium opacity-90 italic">Bairros: {analysis.affectedNeighborhoods.slice(0, 3).join(', ')}...</p>
-              </div>
+        <div className="sticky top-0 z-[60] bg-red-600 text-white shadow-lg animate-pulse md:hidden">
+          <div className="px-4 py-2 flex items-center justify-between text-[11px] font-black uppercase">
+            <div className="flex items-center gap-2">
+              <ShieldAlert size={16} />
+              <span>Risco Crítico</span>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setShowGuide(true)} className="bg-white text-red-600 px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-100 transition-colors shadow-sm">Como agir</button>
-              <button onClick={() => document.getElementById('map')?.scrollIntoView({behavior:'smooth'})} className="bg-red-700 px-3 py-1 rounded-lg text-xs font-bold hover:bg-red-800 transition-colors shadow-sm">Ver Mapa</button>
+              <button onClick={() => setActiveTab('map')} className="bg-white/20 px-2 py-1 rounded">Ver Mapa</button>
+              <button onClick={handleShare} className="bg-white/20 px-2 py-1 rounded"><Share2 size={12} /></button>
             </div>
           </div>
         </div>
       )}
 
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg shadow-blue-200">
-            <Waves size={24} />
+      {/* Header Compacto */}
+      <header className="sticky top-0 md:top-auto z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 py-3 md:py-5">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-blue-600 p-1.5 md:p-2 rounded-lg md:rounded-xl text-white">
+              <Waves size={20} className="md:w-6 md:h-6" />
+            </div>
+            <div className="flex flex-col">
+              <h1 className="text-lg md:text-xl font-black text-slate-900 dark:text-white leading-tight tracking-tighter">ALERTA RECIFE</h1>
+              <div className="flex items-center gap-1">
+                 <div className={`w-1.5 h-1.5 rounded-full ${loading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+                 <span className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase tracking-widest">Live: {analysis?.lastUpdate || '--:--'}</span>
+              </div>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-black text-slate-900 tracking-tighter">ALERTA RECIFE</h1>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Defesa Civil Inteligente</p>
+          
+          <div className="flex items-center gap-2">
+            <button onClick={handleShare} className="p-2.5 text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-full md:hidden">
+              <Share2 size={18} />
+            </button>
+            <button 
+              onClick={() => loadData(true)} 
+              disabled={loading} 
+              className="p-2.5 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-200 dark:shadow-none hover:scale-105 active:scale-95 transition-all"
+            >
+              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+            </button>
           </div>
         </div>
-        <button onClick={loadData} disabled={loading} className="p-2 hover:bg-slate-100 rounded-full transition-all text-slate-600">
-          <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
-        </button>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 pt-8 space-y-8 flex-grow">
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl flex items-center gap-3 font-medium">
-            <AlertCircle size={18} />
-            {error}
-          </div>
-        )}
-
-        {/* Status e Timeline */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+      {/* Viewport Principal */}
+      <main className="flex-grow max-w-5xl mx-auto w-full px-4 md:px-6 pt-6 pb-24 md:pb-12 space-y-6">
+        
+        {/* Desktop Layout - Grid (Mobile uses Tabs) */}
+        <div className="hidden md:grid md:grid-cols-3 gap-6">
+          <div className="col-span-2 space-y-6">
             <StatusCard analysis={analysis} loading={loading} />
+            <div id="desktop-map" className="h-[450px] rounded-3xl overflow-hidden border border-slate-200 dark:border-slate-800">
+               <InteractiveMap history={analysis?.history || []} riskZones={analysis?.riskZones || []} onSelectEvent={setSelectedItem} />
+            </div>
+            <div className="grid grid-cols-2 gap-6">
+               <TideChart data={analysis?.liveTides || []} />
+               <TimelineOverlay events={analysis?.timeline || []} />
+            </div>
+            <HistorySection history={analysis?.history || []} />
           </div>
           <div className="space-y-6">
-            {analysis && <TimelineOverlay events={analysis.timeline} />}
-          </div>
-        </section>
-
-        {/* Mapa e Painel Lateral */}
-        <section id="map" className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm relative">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white/50">
-            <div className="flex items-center gap-2">
-              <MapPin className="text-red-500" size={18} />
-              <h3 className="font-bold text-slate-800">Mapa de Zonas de Risco</h3>
-            </div>
-            <span className="text-[10px] font-bold text-slate-400 italic">Atualizado em: {analysis?.lastUpdate}</span>
-          </div>
-          <div className="h-[500px] flex flex-col md:flex-row">
-            <div className="flex-grow relative h-full">
-              <InteractiveMap 
-                history={analysis?.history || []} 
-                riskZones={analysis?.riskZones || []}
-                onSelectEvent={setSelectedItem}
-              />
-            </div>
-            {selectedItem && (
-              <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-slate-200 p-6 bg-slate-50 animate-in slide-in-from-right md:slide-in-from-right duration-300 overflow-y-auto">
-                <div className="flex justify-between items-center mb-4">
-                   <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Detalhes da Área</h4>
-                   <button onClick={() => setSelectedItem(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+             <section className="bg-slate-900 dark:bg-blue-900 rounded-3xl p-6 text-white shadow-xl">
+                <h3 className="text-sm font-black mb-4 flex items-center gap-2 uppercase tracking-widest"><Star className="text-amber-400" size={16} /> Bairros em Foco</h3>
+                <div className="space-y-2">
+                  {analysis?.affectedNeighborhoods.map((b, i) => (
+                    <div key={i} className="bg-white/10 p-3 rounded-xl flex items-center justify-between group cursor-pointer hover:bg-white/20">
+                      <span className="text-sm font-bold">{b}</span>
+                      <ChevronRight size={14} />
+                    </div>
+                  ))}
                 </div>
-                {'name' in selectedItem ? (
-                  <div>
-                    <h4 className="text-xl font-black text-slate-800 mb-2 leading-tight">{selectedItem.name}</h4>
-                    <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                      selectedItem.level === 'critical' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                    }`}>Risco {selectedItem.level}</span>
-                    <p className="text-sm text-slate-600 mt-4 leading-relaxed">{selectedItem.description}</p>
-                  </div>
-                ) : (
-                  <div>
-                    <h4 className="text-lg font-bold text-slate-800 mb-1 leading-tight">{selectedItem.areas.join(', ')}</h4>
-                    <p className="text-xs text-slate-400 mb-4">{selectedItem.date} às {selectedItem.time}</p>
-                    <div className="space-y-3">
-                       <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Causa Confirmada</p>
-                          <p className="text-sm font-semibold text-slate-700 capitalize">{selectedItem.cause}</p>
-                       </div>
+             </section>
+             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6">
+                <h4 className="text-[10px] font-black text-slate-400 uppercase mb-4">Ação Rápida</h4>
+                <button onClick={() => setShowGuide(true)} className="w-full bg-slate-100 dark:bg-slate-800 p-4 rounded-2xl flex items-center gap-3 font-bold hover:bg-slate-200 transition-colors">
+                  <Shield className="text-blue-600" size={20} /> Guia de Segurança
+                </button>
+             </div>
+          </div>
+        </div>
+
+        {/* Mobile View - Conditional Tabs */}
+        <div className="md:hidden space-y-6">
+          {activeTab === 'home' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <StatusCard analysis={analysis} loading={loading} />
+              <TimelineOverlay events={analysis?.timeline || []} />
+              <TideChart data={analysis?.liveTides || []} />
+              <div className="bg-slate-900 rounded-3xl p-6 text-white">
+                <h3 className="text-xs font-black uppercase mb-4 tracking-widest flex items-center gap-2">
+                   <ShieldAlert size={14} className="text-red-400" /> Áreas Monitoradas
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {analysis?.affectedNeighborhoods.slice(0, 6).map((b, i) => (
+                    <div key={i} className="bg-white/10 p-3 rounded-xl text-xs font-bold">{b}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'map' && (
+            <div className="fixed inset-0 top-[64px] md:relative md:top-0 z-40 bg-white dark:bg-slate-950">
+              <div className="h-full w-full relative">
+                <InteractiveMap history={analysis?.history || []} riskZones={analysis?.riskZones || []} onSelectEvent={setSelectedItem} />
+                
+                {/* Floating controls */}
+                <div className="absolute top-4 right-4 flex flex-col gap-2 z-50">
+                  <button className="p-3 bg-white dark:bg-slate-800 shadow-xl rounded-xl"><LocateFixed size={20} /></button>
+                  <button className="p-3 bg-white dark:bg-slate-800 shadow-xl rounded-xl"><Maximize size={20} /></button>
+                </div>
+
+                {/* Mobile Bottom Sheet Detail */}
+                {selectedItem && (
+                  <div className="absolute inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-300">
+                    <div className="bg-white dark:bg-slate-900 rounded-t-[32px] shadow-2xl p-6 pb-28 border-t border-slate-200 dark:border-slate-800">
+                      <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-6" onClick={() => setSelectedItem(null)}></div>
+                      <div className="flex justify-between items-start mb-4">
+                        <h4 className="text-xl font-black text-slate-900 dark:text-white leading-tight">
+                          {'name' in selectedItem ? selectedItem.name : selectedItem.areas.join(', ')}
+                        </h4>
+                        <button onClick={() => setSelectedItem(null)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full"><X size={20} /></button>
+                      </div>
+                      <p className="text-slate-600 dark:text-slate-400 text-sm mb-6 leading-relaxed">
+                        {'description' in selectedItem ? selectedItem.description : `Registro de alagamento ocorrido em ${selectedItem.date} às ${selectedItem.time}. Causa: ${selectedItem.cause === 'both' ? 'Chuva e Maré' : selectedItem.cause}.`}
+                      </p>
+                      <button className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black flex items-center justify-center gap-2 shadow-lg shadow-blue-100 dark:shadow-none">
+                        <Navigation size={18} /> VER ROTAS ALTERNATIVAS
+                      </button>
                     </div>
                   </div>
                 )}
-                <button className="mt-8 w-full bg-blue-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors shadow-md shadow-blue-100">
-                  <Navigation size={16} /> Rotas Alternativas
-                </button>
               </div>
-            )}
-          </div>
-        </section>
+            </div>
+          )}
 
-        {/* Seções de Detalhe */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-           <TideChart data={analysis?.liveTides || []} />
-           <HistorySection history={analysis?.history || []} />
+          {activeTab === 'history' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+              <HistorySection history={analysis?.history || []} />
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+              <h2 className="text-2xl font-black dark:text-white">Ajustes</h2>
+              <div className="space-y-3">
+                 <button onClick={() => setShowGuide(true)} className="w-full bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                       <Info size={20} className="text-blue-600" />
+                       <span className="font-bold">Guia de Emergência</span>
+                    </div>
+                    <ChevronRight size={18} />
+                 </button>
+                 <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-2xl border border-blue-100 dark:border-blue-800">
+                    <p className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest mb-1">Sobre o Sistema</p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed italic">Protótipo v2.5 otimizado para mobile. Desenvolvido para auxílio preventivo da população do Recife.</p>
+                 </div>
+              </div>
+            </div>
+          )}
         </div>
-
-        {/* Bairros e Áreas Favoritas */}
-        <section className="bg-slate-900 rounded-3xl p-8 text-white shadow-xl">
-          <h3 className="text-xl font-black mb-6 flex items-center gap-2">
-            <Star className="text-amber-400" fill="currentColor" /> Bairros Sob Monitoramento Hoje
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {analysis?.affectedNeighborhoods.map((bairro, idx) => (
-              <div key={idx} className="bg-white/10 hover:bg-white/20 transition-all cursor-pointer p-4 rounded-2xl flex items-center justify-between group border border-white/5">
-                <span className="font-bold text-sm tracking-tight">{bairro}</span>
-                <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Fontes de Dados */}
-        {analysis && (
-          <section className="bg-white border border-slate-200 rounded-3xl p-8">
-             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-               <Search size={14} /> Fontes de Dados em Tempo Real
-             </h4>
-             <div className="flex flex-wrap gap-2">
-                {analysis.sources.map((s, i) => (
-                  <a key={i} href={s.uri} target="_blank" rel="noopener noreferrer" className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
-                    {s.title}
-                  </a>
-                ))}
-             </div>
-          </section>
-        )}
       </main>
+
+      {/* Bottom Navigation Bar (Mobile Only) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white/90 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-200 dark:border-slate-800 px-6 py-3 flex justify-between items-center z-[70] pb-safe">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const active = activeTab === item.id;
+          return (
+            <button 
+              key={item.id} 
+              onClick={() => {
+                setActiveTab(item.id as any);
+                if ('vibrate' in navigator) navigator.vibrate(5);
+              }}
+              className={`flex flex-col items-center gap-1 transition-all ${active ? 'text-blue-600' : 'text-slate-400'}`}
+            >
+              <div className={`p-1.5 rounded-xl transition-all ${active ? 'bg-blue-50 dark:bg-blue-900/50 scale-110' : ''}`}>
+                <Icon size={22} strokeWidth={active ? 3 : 2} />
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-tighter">{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       {/* Guide Modal */}
       {showGuide && (
         <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full relative shadow-2xl animate-in zoom-in-95 duration-300">
-            <button onClick={() => setShowGuide(false)} className="absolute top-6 right-6 p-1 hover:bg-slate-100 rounded-full transition-colors text-slate-400"><X /></button>
-            <h3 className="text-2xl font-black text-slate-900 mb-6 flex items-center gap-2">
-              <Info className="text-blue-600" />
-              Guia de Emergência
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 max-w-md w-full relative shadow-2xl animate-in zoom-in-95 duration-300">
+            <button onClick={() => setShowGuide(false)} className="absolute top-6 right-6 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400"><X /></button>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+              <Shield className="text-blue-600" /> Guia de Emergência
             </h3>
-            <div className="space-y-6">
-              <div className="flex gap-4">
-                <div className="bg-blue-100 text-blue-600 p-3 h-fit rounded-xl font-black shrink-0">1</div>
-                <div>
-                   <h5 className="font-bold text-slate-800 mb-1">Evite zonas de risco</h5>
-                   <p className="text-sm text-slate-600 leading-relaxed">Não tente atravessar ruas alagadas. A força da água pode arrastar veículos e esconder buracos ou bueiros abertos.</p>
-                </div>
+            <div className="space-y-4">
+              <div className="bg-blue-50 dark:bg-slate-800 p-4 rounded-xl border-l-4 border-blue-600">
+                 <h5 className="font-bold text-sm mb-1">1. Evite Alagamentos</h5>
+                 <p className="text-xs text-slate-600 dark:text-slate-400">Não atravesse ruas com água acima do tornozelo. Veículos podem flutuar.</p>
               </div>
-              <div className="flex gap-4">
-                <div className="bg-blue-100 text-blue-600 p-3 h-fit rounded-xl font-black shrink-0">2</div>
-                <div>
-                   <h5 className="font-bold text-slate-800 mb-1">Segurança Elétrica</h5>
-                   <p className="text-sm text-slate-600 leading-relaxed">Em caso de invasão de água na residência, desligue imediatamente o quadro geral de energia e evite contato com tomadas.</p>
-                </div>
-              </div>
-              <div className="flex gap-4">
-                <div className="bg-blue-100 text-blue-600 p-3 h-fit rounded-xl font-black shrink-0">3</div>
-                <div>
-                   <h5 className="font-bold text-slate-800 mb-1">Contatos Oficiais</h5>
-                   <p className="text-sm text-slate-600 leading-relaxed">Acione a Defesa Civil pelo 0800 081 3400 ou os Bombeiros pelo 193 para emergências reais.</p>
-                </div>
+              <div className="bg-amber-50 dark:bg-slate-800 p-4 rounded-xl border-l-4 border-amber-500">
+                 <h5 className="font-bold text-sm mb-1">2. Contatos Úteis</h5>
+                 <p className="text-xs text-slate-600 dark:text-slate-400">Defesa Civil: 0800 081 3400. Bombeiros: 193.</p>
               </div>
             </div>
-            <button onClick={() => setShowGuide(false)} className="mt-8 w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-colors">Entendi</button>
+            <button onClick={() => setShowGuide(false)} className="mt-8 w-full bg-slate-900 dark:bg-blue-600 text-white py-4 rounded-2xl font-bold">FECHAR</button>
           </div>
         </div>
       )}
-
-      {/* Footer - Créditos e Aviso Legal */}
-      <footer className="mt-12 py-12 px-6 border-t border-slate-200 bg-white">
-        <div className="max-w-5xl mx-auto text-center space-y-4">
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-xs font-bold text-slate-500 max-w-2xl leading-relaxed">
-              Protótipo independente e gratuito para a população do Recife. Desenvolvido por André Occenstein (2026).
-            </p>
-            <p className="text-[10px] font-medium text-slate-400 max-w-xl leading-relaxed italic">
-              Este sistema é experimental e não é canal oficial da Prefeitura ou da Defesa Civil. 
-              As previsões e análises são geradas por Inteligência Artificial (Gemini) baseada em dados públicos e podem conter imprecisões.
-            </p>
-          </div>
-          <div className="pt-4 flex justify-center gap-4 text-slate-300">
-            <Waves size={16} />
-            <CloudRain size={16} />
-            <Shield size={16} />
-          </div>
-        </div>
-      </footer>
     </div>
   );
 };

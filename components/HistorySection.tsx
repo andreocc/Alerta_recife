@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { History, Calendar, Clock, MapPin, CloudRain, Waves, Info } from 'lucide-react';
+import React, { useState } from 'react';
+import { History, Calendar, Clock, MapPin, CloudRain, Waves, ChevronDown, ChevronUp, Share2 } from 'lucide-react';
 import { FloodHistory } from '../types';
 
 interface HistorySectionProps {
@@ -8,82 +8,82 @@ interface HistorySectionProps {
 }
 
 export const HistorySection: React.FC<HistorySectionProps> = ({ history }) => {
-  const getCauseIcon = (cause: string) => {
-    switch (cause) {
-      case 'rain': return <CloudRain className="w-4 h-4 text-blue-500" />;
-      case 'tide': return <Waves className="w-4 h-4 text-cyan-500" />;
-      case 'both': return (
-        <div className="flex -space-x-1">
-          <CloudRain className="w-4 h-4 text-blue-500" />
-          <Waves className="w-4 h-4 text-cyan-500" />
-        </div>
-      );
-      default: return null;
-    }
-  };
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'rain' | 'tide'>('all');
 
-  const getCauseLabel = (cause: string) => {
-    switch (cause) {
-      case 'rain': return 'Chuva';
-      case 'tide': return 'Maré Alta';
-      case 'both': return 'Chuva + Maré';
-      default: return '';
+  const filteredHistory = history.filter(h => {
+    if (filter === 'all') return true;
+    return h.cause === filter || h.cause === 'both';
+  });
+
+  const handleShare = async (e: React.MouseEvent, event: FloodHistory) => {
+    e.stopPropagation();
+    if (navigator.share) {
+      await navigator.share({
+        title: `Alerta Recife: Histórico`,
+        text: `Alagamento registrado em ${event.areas.join(', ')} no dia ${event.date}.`,
+        url: window.location.href
+      });
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-          <History className="text-blue-600" />
-          Histórico Recente de Alagamentos
+    <div className="space-y-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+          <History className="text-blue-600" /> Histórico
         </h3>
-        <span className="text-xs font-semibold text-slate-400 uppercase">Últimos 4 eventos</span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {history.map((event) => (
-          <div key={event.id} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex justify-between items-start mb-4">
-              <div className="flex gap-2">
-                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-                  <Calendar size={12} className="text-slate-400" />
-                  <span className="text-xs font-bold text-slate-600">{event.date}</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-                  <Clock size={12} className="text-slate-400" />
-                  <span className="text-xs font-bold text-slate-600">{event.time}</span>
-                </div>
-              </div>
-              <div className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
-                event.severity === 'severe' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'
-              }`}>
-                {event.severity === 'severe' ? 'Grave' : 'Moderado'}
-              </div>
-            </div>
+      {/* Chips de Filtro (Horizontal Scroll) */}
+      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
+        <button onClick={() => setFilter('all')} className={`shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all ${filter === 'all' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800'}`}>Todos</button>
+        <button onClick={() => setFilter('rain')} className={`shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all ${filter === 'rain' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800'}`}>Chuva</button>
+        <button onClick={() => setFilter('tide')} className={`shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all ${filter === 'tide' ? 'bg-blue-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800'}`}>Maré</button>
+      </div>
 
-            <div className="space-y-3">
-              <div className="flex items-start gap-3">
-                <MapPin className="w-4 h-4 text-slate-400 mt-1 shrink-0" />
-                <div className="flex flex-wrap gap-1">
-                  {event.areas.map((area, i) => (
-                    <span key={i} className="text-sm text-slate-700 font-medium">
-                      {area}{i < event.areas.length - 1 ? ',' : ''}
-                    </span>
-                  ))}
+      <div className="space-y-3">
+        {filteredHistory.map((event) => {
+          const isExpanded = expandedId === event.id;
+          return (
+            <div 
+              key={event.id} 
+              onClick={() => setExpandedId(isExpanded ? null : event.id)}
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden transition-all active:scale-[0.98]"
+            >
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                   <div className={`p-2 rounded-xl ${event.severity === 'severe' ? 'bg-red-50 dark:bg-red-900/30 text-red-600' : 'bg-orange-50 dark:bg-orange-900/30 text-orange-600'}`}>
+                      {event.cause === 'tide' ? <Waves size={18} /> : <CloudRain size={18} />}
+                   </div>
+                   <div>
+                      <h4 className="text-sm font-black text-slate-900 dark:text-white leading-tight">{event.areas[0]}</h4>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{event.date} • {event.time}</p>
+                   </div>
+                </div>
+                <div className="flex items-center gap-3">
+                   <button onClick={(e) => handleShare(e, event)} className="p-2 text-slate-300"><Share2 size={16} /></button>
+                   {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                 </div>
               </div>
-
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-50">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Causa:</span>
-                <div className="flex items-center gap-1.5">
-                  {getCauseIcon(event.cause)}
-                  <span className="text-xs font-semibold text-slate-600">{getCauseLabel(event.cause)}</span>
+              
+              {isExpanded && (
+                <div className="px-4 pb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {event.details || `Áreas afetadas: ${event.areas.join(', ')}. Severidade reportada como ${event.severity}.`}
+                    </p>
+                    <div className="flex items-center gap-4">
+                       <div className="flex items-center gap-1.5 text-[10px] font-black uppercase text-slate-400">
+                          <MapPin size={12} /> {event.lat.toFixed(3)}, {event.lng.toFixed(3)}
+                       </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
