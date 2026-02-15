@@ -1,9 +1,9 @@
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const corsHeaders = {
       'Access-Control-Allow-Origin': env.FRONTEND_URL || '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
 
@@ -11,35 +11,35 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
+    // Cache Key baseada no corpo (prompt) para garantir que respostas diferentes não colidam
+    const cacheUrl = new URL(request.url);
+    const cacheKey = new Request(cacheUrl.toString(), {
+      method: 'GET', // Transformamos em GET para o Cache API aceitar
+      headers: request.headers
+    });
+    const cache = caches.default;
+
+    let response = await cache.match(cacheKey);
+    if (response) return response;
+
     if (request.method !== 'POST') {
-      return new Response('Method not allowed', { 
-        status: 405,
-        headers: corsHeaders 
-      });
+      return new Response('Use POST', { status: 405, headers: corsHeaders });
     }
 
     try {
       const body = await request.json();
       const { prompt } = body;
 
-      if (!prompt) {
-        return new Response(
-          JSON.stringify({ error: 'Prompt é obrigatório' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Chamada REST para Gemini API usando gemini-3-flash-preview
+      // Usando gemini-2.0-flash para latência ultrabaixa
       const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${env.GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite-preview-02-05:generateContent?key=${env.GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
-              temperature: 0.1, // Baixa temperatura para JSON mais estável
-              maxOutputTokens: 4096,
+              temperature: 0,
               responseMimeType: "application/json"
             },
           }),
@@ -48,21 +48,23 @@ export default {
 
       const data = await geminiResponse.json();
       
-      return new Response(JSON.stringify(data), {
+      const responseData = new Response(JSON.stringify(data), {
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=900', // Cache de borda por 15 minutos
+          'Cache-Control': 'public, s-maxage=600, max-age=300', 
         },
       });
+
+      // Salva no cache da borda de forma assíncrona
+      ctx.waitUntil(cache.put(cacheKey, responseData.clone()));
+
+      return responseData;
     } catch (error) {
-      return new Response(
-        JSON.stringify({ error: 'Erro ao processar requisição no servidor' }),
-        { 
-          status: 500,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
+      return new Response(JSON.stringify({ error: 'Worker Error' }), { 
+        status: 500, 
+        headers: corsHeaders 
+      });
     }
   },
 };
