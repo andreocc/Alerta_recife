@@ -1,5 +1,5 @@
 
-name = "alerta-recife-api"
+name = "alerta-recife"
 main = "worker/index.js"
 compatibility_date = "2024-01-01"
 
