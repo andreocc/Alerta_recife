@@ -1,11 +1,7 @@
-
-import { GoogleGenAI } from "@google/genai";
 import { RiskAnalysis, GroundingSource } from "../types";
 
 const CACHE_KEY = 'risk_analysis_recife_v5';
 const DEFAULT_TTL_MINUTES = 10;
-
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 const cacheManager = {
   get: (): { data: RiskAnalysis; timestamp: number } | null => {
@@ -22,7 +18,6 @@ const cacheManager = {
 };
 
 const performAnalysis = async (): Promise<RiskAnalysis> => {
-  const ai = getAI();
   const now = new Date();
   const dateStr = now.toLocaleDateString('pt-BR');
   const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -31,6 +26,7 @@ const performAnalysis = async (): Promise<RiskAnalysis> => {
 Data/Hora atual: ${dateStr} às ${timeStr}.
 
 TAREFA: Analise o risco operacional hoje em Recife usando Google Search.
+
 FOCO NA POPULAÇÃO: Use linguagem direta, sem jargões (ex: evite "VCAN", "sizígia" no resumo).
 
 ESTRUTURA DE RESPOSTA (Obrigatório responder):
@@ -71,21 +67,27 @@ RETORNE JSON:
 }`;
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        temperature: 0.1
-      },
+    // Call our Vercel serverless API instead of Gemini directly
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
     });
 
-    const candidate = response.candidates?.[0];
-    const text = response.text;
-    if (!text) throw new Error("Sem dados.");
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'API request failed');
+    }
 
+    const data = await response.json();
+    
+    // Extract text from Gemini response structure
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || data.text;
+    if (!text) throw new Error("Sem dados na resposta.");
+
+    // Extract grounding sources if available
     const sources: GroundingSource[] = [];
+    const candidate = data.candidates?.[0];
     if (candidate?.groundingMetadata?.groundingChunks) {
       candidate.groundingMetadata.groundingChunks.forEach((chunk: any) => {
         if (chunk.web) sources.push({ title: chunk.web.title || "Fonte", uri: chunk.web.uri });
@@ -94,8 +96,9 @@ RETORNE JSON:
 
     const result = JSON.parse(text);
     return { ...result, sources, lastUpdate: `${dateStr} às ${timeStr}` } as RiskAnalysis;
+    
   } catch (error) {
-    console.error(error);
+    console.error('Analysis error:', error);
     throw new Error("Erro ao sincronizar dados da Defesa Civil.");
   }
 };
@@ -103,7 +106,9 @@ RETORNE JSON:
 export const analyzeRisk = async (forceRefresh: boolean = false): Promise<RiskAnalysis> => {
   const cached = cacheManager.get();
   const isStale = !cached || (Date.now() - cached.timestamp > DEFAULT_TTL_MINUTES * 60 * 1000);
+
   if (!isStale && !forceRefresh && cached) return cached.data;
+
   try {
     const freshData = await performAnalysis();
     cacheManager.set(freshData);
