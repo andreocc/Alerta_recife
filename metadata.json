@@ -1,0 +1,8 @@
+
+{
+  "name": "Alerta Recife",
+  "description": "Sistema de monitoramento de alagamentos e marés em tempo real.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
