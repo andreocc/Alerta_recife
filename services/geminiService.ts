@@ -1,11 +1,8 @@
 
-import { GoogleGenAI } from "@google/genai";
 import { RiskAnalysis, GroundingSource } from "../types";
 
 const CACHE_KEY = 'risk_analysis_recife_v5';
 const DEFAULT_TTL_MINUTES = 10;
-
-const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 const cacheManager = {
   get: (): { data: RiskAnalysis; timestamp: number } | null => {
@@ -22,7 +19,6 @@ const cacheManager = {
 };
 
 const performAnalysis = async (): Promise<RiskAnalysis> => {
-  const ai = getAI();
   const now = new Date();
   const dateStr = now.toLocaleDateString('pt-BR');
   const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -70,34 +66,33 @@ RETORNE JSON:
   "riskZones": [{"id": "string", "name": "string", "level": "baixo"|"médio"|"alto"|"crítico"|"extremo", "description": "string", "polygon": [[number, number]]}]
 }`;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        temperature: 0.1
-      },
-    });
+  const response = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
 
-    const candidate = response.candidates?.[0];
-    const text = response.text;
-    if (!text) throw new Error("Sem dados.");
-
-    const sources: GroundingSource[] = [];
-    if (candidate?.groundingMetadata?.groundingChunks) {
-      candidate.groundingMetadata.groundingChunks.forEach((chunk: any) => {
-        if (chunk.web) sources.push({ title: chunk.web.title || "Fonte", uri: chunk.web.uri });
-      });
-    }
-
-    const result = JSON.parse(text);
-    return { ...result, sources, lastUpdate: `${dateStr} às ${timeStr}` } as RiskAnalysis;
-  } catch (error) {
-    console.error(error);
-    throw new Error("Erro ao sincronizar dados da Defesa Civil.");
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Erro desconhecido' }));
+    throw new Error(err.error || `Erro HTTP ${response.status}`);
   }
+
+  const data = await response.json();
+
+  // Extract text from Gemini response envelope
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error("Sem dados retornados pela IA.");
+
+  const sources: GroundingSource[] = [];
+  const groundingChunks = data?.candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (groundingChunks) {
+    groundingChunks.forEach((chunk: any) => {
+      if (chunk.web) sources.push({ title: chunk.web.title || "Fonte", uri: chunk.web.uri });
+    });
+  }
+
+  const result = JSON.parse(text);
+  return { ...result, sources, lastUpdate: `${dateStr} às ${timeStr}` } as RiskAnalysis;
 };
 
 export const analyzeRisk = async (forceRefresh: boolean = false): Promise<RiskAnalysis> => {
