@@ -32,7 +32,7 @@ export default {
 
       // Usando gemini-2.0-flash para latência ultrabaixa
       const geminiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite-preview-02-05:generateContent?key=${env.GEMINI_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -47,12 +47,12 @@ export default {
       );
 
       const data = await geminiResponse.json();
-      
+
       const responseData = new Response(JSON.stringify(data), {
         headers: {
           ...corsHeaders,
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, s-maxage=600, max-age=300', 
+          'Cache-Control': 'public, s-maxage=600, max-age=300',
         },
       });
 
@@ -61,9 +61,9 @@ export default {
 
       return responseData;
     } catch (error) {
-      return new Response(JSON.stringify({ error: 'Worker Error' }), { 
-        status: 500, 
-        headers: corsHeaders 
+      return new Response(JSON.stringify({ error: 'Worker Error' }), {
+        status: 500,
+        headers: corsHeaders
       });
     }
   },
