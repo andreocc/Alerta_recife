@@ -1,13 +1,14 @@
-
 import React, { useState, useEffect, useCallback, Suspense, lazy, useMemo } from 'react';
-import { 
-  Waves, MapPin, RefreshCw, Home, History as HistoryIcon, AlertTriangle, WifiOff, Clock, ExternalLink
+import {
+  Waves, MapPin, RefreshCw, Home, History as HistoryIcon, WifiOff, Clock, ExternalLink
 } from 'lucide-react';
 import { TideChart } from './components/TideChart';
 import { StatusCard } from './components/StatusCard';
 import { HistorySection } from './components/HistorySection';
 import { TimelineOverlay } from './components/TimelineOverlay';
-import { analyzeRisk } from './services/geminiService';
+import { AlertBanner } from './components/AlertBanner';
+import { analyzeRisk } from './services/riskEngine';
+import { cleanupOldAlerts } from './services/notificationService';
 import { RiskAnalysis, FloodHistory, RiskZone } from './types';
 
 const InteractiveMap = lazy(() => import('./components/InteractiveMap').then(m => ({ default: m.InteractiveMap })));
@@ -19,16 +20,21 @@ const Skeleton = ({ className }: { className: string }) => (
 const App: React.FC = () => {
   const [analysis, setAnalysis] = useState<RiskAnalysis | null>(() => {
     try {
-      const saved = localStorage.getItem('risk_analysis_recife_v3');
+      const saved = localStorage.getItem('risk_analysis_recife_v6');
       return saved ? JSON.parse(saved).data : null;
     } catch { return null; }
   });
-  
+
   const [loading, setLoading] = useState(!analysis);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'home' | 'map' | 'history'>('home');
   const [selectedItem, setSelectedItem] = useState<FloodHistory | RiskZone | null>(null);
+
+  // Limpa alertas antigos na montagem
+  useEffect(() => {
+    cleanupOldAlerts();
+  }, []);
 
   const loadData = useCallback(async (force: boolean = false) => {
     setError(null);
@@ -36,11 +42,21 @@ const App: React.FC = () => {
     else setLoading(true);
 
     try {
-      const result = await analyzeRisk(force);
+      const result = await analyzeRisk({ forceRefresh: force });
       setAnalysis(result);
     } catch (err: any) {
-      console.error("Erro ao carregar:", err);
-      setError(err.message || "Erro de conexão. Verifique sua internet.");
+      console.error('[App] Erro ao carregar análise:', err);
+
+      let userMessage = 'Erro desconhecido. Tente novamente.';
+      if (err.message?.includes('fetch') || err.message?.includes('network')) {
+        userMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+      } else if (err.message?.includes('timeout')) {
+        userMessage = 'Tempo de conexão esgotado. Verifique sua internet.';
+      } else if (err.message) {
+        userMessage = err.message;
+      }
+
+      setError(userMessage);
     } finally {
       setLoading(false);
       setSyncing(false);
@@ -56,21 +72,21 @@ const App: React.FC = () => {
       <StatusCard analysis={analysis} loading={false} />
       {analysis && (
         <>
-          <TimelineOverlay events={analysis.timeline || []} />
-          <TideChart data={analysis.liveTides || []} />
-          
-          {/* Fontes de Grounding */}
+          <TimelineOverlay events={analysis.timeline || []} loading={loading || syncing} />
+          <TideChart data={analysis.liveTides || []} loading={loading || syncing} />
+
+          {/* Fontes de Dados */}
           {analysis.sources && analysis.sources.length > 0 && (
             <div className="p-4 bg-slate-100 dark:bg-slate-900/50 rounded-2xl">
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
-                <ExternalLink size={12} /> Fontes Oficiais Consultadas
+                <ExternalLink size={12} /> Fontes de Dados Oficiais
               </h4>
               <div className="flex flex-wrap gap-2">
                 {analysis.sources.map((src, i) => (
-                  <a 
-                    key={i} 
-                    href={src.uri} 
-                    target="_blank" 
+                  <a
+                    key={i}
+                    href={src.uri}
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="text-[10px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-full border border-blue-100 dark:border-blue-800/50 hover:bg-blue-100 transition-colors"
                   >
@@ -83,7 +99,14 @@ const App: React.FC = () => {
         </>
       )}
     </div>
-  ), [analysis]);
+  ), [analysis, loading, syncing]);
+
+  const historyData = useMemo(() => analysis?.history || [], [analysis]);
+  const riskZonesData = useMemo(() => analysis?.riskZones || [], [analysis]);
+
+  const handleSelectEvent = useCallback((event: FloodHistory | RiskZone) => {
+    setSelectedItem(event);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col selection:bg-blue-100">
@@ -94,33 +117,45 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <header className="sticky top-0 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-5 py-3">
+      <header className="sticky top-0 z-50 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-200/50 dark:border-slate-800/50 px-4 py-3">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex flex-col">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <div className="bg-blue-600 p-1.5 rounded-xl text-white shadow-lg shadow-blue-500/20">
                 <Waves size={18} strokeWidth={3} />
               </div>
-              <h1 className="text-xl font-black dark:text-white tracking-tight italic">RECIFE<span className="text-blue-600">ALERTA</span></h1>
+              <h1 className="text-lg font-black dark:text-white tracking-tight italic">
+                RECIFE<span className="text-blue-600">ALERTA</span>
+              </h1>
             </div>
             {analysis && (
               <div className="flex items-center gap-1.5 mt-1">
                 <Clock size={10} className="text-slate-400" />
                 <span className={`text-[10px] font-bold uppercase tracking-wider ${analysis.isStale ? 'text-orange-500' : 'text-slate-400'}`}>
-                  {analysis.isStale ? 'Defasado (Cache): ' : 'Hoje: '} {analysis.lastUpdate}
+                  {analysis.isStale ? 'Defasado (Cache): ' : 'Atualizado: '} {analysis.lastUpdate}
                 </span>
               </div>
             )}
           </div>
-          <button 
+          <button
             disabled={syncing || loading}
-            onClick={() => loadData(true)} 
+            onClick={() => loadData(true)}
             className="p-2.5 bg-slate-100 dark:bg-slate-800 rounded-full active:scale-95 transition-all disabled:opacity-50"
+            aria-label="Atualizar dados"
           >
             <RefreshCw size={18} className={`${(syncing || loading) ? 'animate-spin text-blue-600' : 'text-slate-500'}`} />
           </button>
         </div>
       </header>
+
+      {/* Alert Banner — abaixo do header */}
+      {analysis && analysis.level !== 'baixo' && (
+        <AlertBanner
+          level={analysis.level}
+          title={analysis.title}
+          message={analysis.message}
+        />
+      )}
 
       <main className="flex-grow max-w-5xl mx-auto w-full px-4 pt-4 pb-28">
         {error && !analysis ? (
@@ -132,7 +167,7 @@ const App: React.FC = () => {
               <h2 className="text-xl font-black dark:text-white">Ops! Algo deu errado</h2>
               <p className="text-slate-500 dark:text-slate-400 text-sm max-w-xs mx-auto mt-1">{error}</p>
             </div>
-            <button 
+            <button
               onClick={() => loadData(true)}
               className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black text-sm shadow-xl shadow-blue-600/20 active:scale-95 transition-all"
             >
@@ -157,10 +192,10 @@ const App: React.FC = () => {
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mapeando Riscos...</span>
                   </div>
                 }>
-                  <InteractiveMap 
-                    history={analysis?.history || []} 
-                    riskZones={analysis?.riskZones || []} 
-                    onSelectEvent={setSelectedItem} 
+                  <InteractiveMap
+                    history={historyData}
+                    riskZones={riskZonesData}
+                    onSelectEvent={handleSelectEvent}
                   />
                 </Suspense>
               </div>
@@ -176,16 +211,16 @@ const App: React.FC = () => {
       </main>
 
       {/* Navegação Inferior */}
-      <nav className="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border-t border-slate-200/50 dark:border-slate-800/50 px-10 py-4 flex justify-between items-center z-[70] pb-safe shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]">
+      <nav className="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border-t border-slate-200/50 dark:border-slate-800/50 px-6 py-4 flex justify-between items-center z-[70] pb-safe shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]">
         {[
           { id: 'home', icon: Home, label: 'Resumo' },
           { id: 'map', icon: MapPin, label: 'Zonas' },
-          { id: 'history', icon: HistoryIcon, label: 'Histórico' }
+          { id: 'history', icon: HistoryIcon, label: 'Histórico' },
         ].map(item => (
-          <button 
+          <button
             key={item.id}
             onClick={() => setActiveTab(item.id as any)}
-            className={`flex flex-col items-center gap-1.5 transition-all ${activeTab === item.id ? 'text-blue-600 scale-110' : 'text-slate-400 opacity-60'}`}
+            className={`flex flex-col items-center gap-1.5 transition-all active:scale-95 ${activeTab === item.id ? 'text-blue-600 scale-110' : 'text-slate-400 opacity-60'}`}
           >
             <item.icon size={20} strokeWidth={activeTab === item.id ? 3 : 2} />
             <span className="text-[9px] font-black uppercase tracking-tighter">{item.label}</span>
@@ -193,10 +228,11 @@ const App: React.FC = () => {
         ))}
       </nav>
 
+      {/* Animações globais */}
       <style>{`
-        @keyframes loading { 
-          0% { transform: translateX(-100%); width: 30%; } 
-          100% { transform: translateX(400%); width: 30%; } 
+        @keyframes loading {
+          0% { transform: translateX(-100%); width: 30%; }
+          100% { transform: translateX(400%); width: 30%; }
         }
       `}</style>
     </div>

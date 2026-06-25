@@ -5,9 +5,20 @@ import { TideData } from '../types';
 
 interface TideChartProps {
   data: TideData[];
+  loading?: boolean;
 }
 
-export const TideChart: React.FC<TideChartProps> = ({ data }) => {
+export const TideChart: React.FC<TideChartProps> = ({ data, loading = false }) => {
+  // Loading state
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800">
+        <div className="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded mb-4 animate-pulse"></div>
+        <div className="h-48 w-full bg-slate-100 dark:bg-slate-800/50 rounded-2xl animate-pulse"></div>
+      </div>
+    );
+  }
+
   // Se não houver dados, não renderiza o container para evitar erros de cálculo de dimensão
   if (!data || data.length === 0) return null;
 

@@ -4,9 +4,32 @@ import { TimelineEvent } from '../types';
 
 interface TimelineOverlayProps {
   events: TimelineEvent[];
+  loading?: boolean;
 }
 
-export const TimelineOverlay: React.FC<TimelineOverlayProps> = ({ events }) => {
+export const TimelineOverlay: React.FC<TimelineOverlayProps> = ({ events, loading = false }) => {
+  // Loading state
+  if (loading) {
+    return (
+      <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800">
+        <div className="flex items-center justify-between mb-4">
+          <div className="h-3 w-24 bg-slate-200 dark:bg-slate-800 rounded animate-pulse"></div>
+          <div className="flex gap-2">
+            <div className="h-3 w-12 bg-slate-200 dark:bg-slate-800 rounded animate-pulse"></div>
+          </div>
+        </div>
+        <div className="flex overflow-x-auto pb-4 gap-2 no-scrollbar">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="flex-shrink-0 flex flex-col items-center gap-2">
+              <div className="h-24 md:h-32 w-8 bg-slate-100 dark:bg-slate-800 rounded-2xl animate-pulse"></div>
+              <div className="h-2 w-6 bg-slate-200 dark:bg-slate-800 rounded animate-pulse"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white dark:bg-slate-900 p-5 md:p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-800">
       <div className="flex items-center justify-between mb-4">
@@ -20,7 +43,7 @@ export const TimelineOverlay: React.FC<TimelineOverlayProps> = ({ events }) => {
         {events.map((ev, i) => (
           <div key={i} className="flex-shrink-0 flex flex-col items-center gap-2 snap-center">
             <div className="h-24 md:h-32 w-8 bg-slate-50 dark:bg-slate-950 rounded-2xl relative overflow-hidden flex flex-col justify-end">
-              <div 
+              <div
                 className={`w-full transition-all duration-1000 ${
                   ev.riskType === 'combined' ? 'bg-red-500' : ev.riskType === 'tide' ? 'bg-cyan-400' : 'bg-blue-500'
                 }`}
