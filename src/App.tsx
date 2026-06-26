@@ -39,6 +39,22 @@ const RiskBackground: React.FC<{ level: RiskLevel; children: React.ReactNode }> 
   );
 };
 
+// ── Rodapé discreto AlphaWorks ─────────────────────────────
+const AlphaWorksFooter: React.FC = () => (
+  <footer className="fixed bottom-20 inset-x-0 z-[70] flex justify-center pointer-events-none">
+    <div className="pointer-events-auto text-center text-[9px] font-medium text-slate-400 dark:text-slate-500">
+      <a
+        href="https://www.alphaworks.com.br"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-1 hover:text-slate-300 dark:hover:text-slate-400 transition-colors"
+      >
+        Desenvolvido por AlphaWorks
+      </a>
+    </div>
+  </footer>
+);
+
 // ── Navegação flutuante (pílula) ───────────────────────────
 const FloatingNav: React.FC<{
   activeTab: string;
@@ -271,6 +287,9 @@ const App: React.FC = () => {
           </>
         )}
       </main>
+
+      {/* Rodapé AlphaWorks — acima da navegação flutuante */}
+      <AlphaWorksFooter />
 
       {/* Navegação flutuante */}
       <FloatingNav activeTab={activeTab} onTabChange={setActiveTab} />
