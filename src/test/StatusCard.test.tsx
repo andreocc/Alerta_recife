@@ -47,10 +47,10 @@ describe('StatusCard', () => {
       const { unmount } = render(<StatusCard analysis={analysis} loading={false} />);
       const labelMap: Record<string, string> = {
         baixo: 'NORMALIDADE',
-        médio: 'FIQUE ATENTO',
-        alto: 'PREPARE-SE',
+        médio: 'ATENÇÃO',
+        alto: 'ALERTA',
         crítico: 'PERIGO REAL',
-        extremo: 'AJA AGORA',
+        extremo: 'EMERGÊNCIA',
       };
       expect(screen.getByText(new RegExp(labelMap[level]))).toBeInTheDocument();
       unmount();

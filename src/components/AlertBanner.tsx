@@ -1,8 +1,8 @@
 /**
- * AlertBanner — Banner de alerta mobile-first para mudanças de nível de risco.
+ * AlertBanner — Banner de alerta moderno com efeito glow 3D.
  *
- * Exibido abaixo do header quando o nível de risco é médio ou superior.
- * Anima com entrada suave, cores por nível, e botão "Entendi" para dismiss.
+ * Níveis crítico/extremo ganham animação de pulso no glow.
+ * Entrada com slide + spring. Botões em vidro.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   AlertCircle,
   ShieldAlert,
-  Zap,
   X,
   Bell,
   BellOff,
@@ -31,137 +30,149 @@ interface AlertBannerProps {
   message: string;
 }
 
-const levelConfig: Record<RiskLevel, {
-  bg: string;
-  border: string;
-  text: string;
+interface LevelStyle {
+  gradient: string;
+  glow: string;
+  pulse: string;
+  badge: string;
   iconBg: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ComponentType<{ size?: number }>;
   label: string;
-}> = {
+}
+
+const styles: Record<RiskLevel, LevelStyle> = {
   extremo: {
-    bg: 'bg-purple-50 dark:bg-purple-950/40',
-    border: 'border-purple-600/40',
-    text: 'text-purple-800 dark:text-purple-100',
-    iconBg: 'bg-purple-600',
+    gradient: 'from-purple-600/90 via-fuchsia-600/90 to-purple-700/90',
+    glow: 'shadow-[0_0_40px_rgba(147,51,234,0.4)]',
+    pulse: 'animate-pulse-glow-purple',
+    badge: 'bg-purple-600/80',
+    iconBg: 'bg-gradient-to-br from-purple-600 to-fuchsia-600',
     icon: ShieldAlert,
     label: 'EMERGÊNCIA',
   },
   crítico: {
-    bg: 'bg-red-50 dark:bg-red-950/40',
-    border: 'border-red-500/40',
-    text: 'text-red-800 dark:text-red-100',
-    iconBg: 'bg-red-500',
+    gradient: 'from-red-500/90 to-orange-500/90',
+    glow: 'shadow-[0_0_40px_rgba(239,68,68,0.4)]',
+    pulse: 'animate-pulse-glow',
+    badge: 'bg-red-500/80',
+    iconBg: 'bg-gradient-to-br from-red-500 to-orange-500',
     icon: ShieldAlert,
     label: 'PERIGO',
   },
   alto: {
-    bg: 'bg-orange-50 dark:bg-orange-950/40',
-    border: 'border-orange-500/40',
-    text: 'text-orange-800 dark:text-orange-100',
-    iconBg: 'bg-orange-500',
+    gradient: 'from-orange-500/90 to-amber-500/90',
+    glow: 'shadow-[0_0_25px_rgba(249,115,22,0.3)]',
+    pulse: '',
+    badge: 'bg-orange-500/80',
+    iconBg: 'bg-gradient-to-br from-orange-500 to-amber-500',
     icon: AlertCircle,
     label: 'ALERTA',
   },
   médio: {
-    bg: 'bg-amber-50 dark:bg-amber-950/40',
-    border: 'border-amber-500/40',
-    text: 'text-amber-800 dark:text-amber-100',
-    iconBg: 'bg-amber-500',
+    gradient: 'from-amber-400/90 to-yellow-400/90',
+    glow: 'shadow-[0_0_15px_rgba(234,179,8,0.2)]',
+    pulse: '',
+    badge: 'bg-amber-400/80',
+    iconBg: 'bg-gradient-to-br from-amber-400 to-yellow-500',
     icon: AlertTriangle,
     label: 'ATENÇÃO',
   },
   baixo: {
-    bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-    border: 'border-emerald-500/40',
-    text: 'text-emerald-800 dark:text-emerald-100',
-    iconBg: 'bg-emerald-500',
+    gradient: '',
+    glow: '',
+    pulse: '',
+    badge: '',
+    iconBg: '',
     icon: AlertCircle,
-    label: 'NORMAL',
+    label: '',
   },
 };
 
 export const AlertBanner: React.FC<AlertBannerProps> = ({ level, title, message }) => {
   const [dismissed, setDismissed] = useState(true);
+  const [visible, setVisible] = useState(false);
 
   const alertId = generateAlertId(level);
-  const config = levelConfig[level];
+  const s = styles[level];
 
-  // Verifica se o alerta já foi dispensado hoje
   useEffect(() => {
     if (level !== 'baixo') {
       setDismissed(isAlertDismissed(alertId));
     }
   }, [level, alertId]);
 
-  // Detecta mudança de nível e dispara notificação
   useEffect(() => {
     if (level !== 'baixo') {
       const changed = hasRiskChanged(level);
       if (changed) {
         setDismissed(false);
-
-        // Envia notificação local
-        sendAlertNotification(
-          `Alerta Recife: ${config.label}`,
-          message,
-          level,
-          alertId
-        );
+        sendAlertNotification(`Alerta Recife: ${s.label}`, message, level, alertId);
       }
     }
-  }, [level, message, config.label, alertId]);
+  }, [level, message, s.label, alertId]);
 
-  // Não mostra nada se nível é baixo ou foi dispensado
+  // Animação de entrada
+  useEffect(() => {
+    if (!dismissed && level !== 'baixo') {
+      requestAnimationFrame(() => setVisible(true));
+    } else {
+      setVisible(false);
+    }
+  }, [dismissed, level]);
+
   if (level === 'baixo' || dismissed) return null;
 
-  const Icon = config.icon;
+  const Icon = s.icon;
+  const isHighRisk = level === 'crítico' || level === 'extremo';
 
   return (
     <div
-      className={`animate-in slide-in-from-top-2 fade-in duration-300 ${config.bg} ${config.text} border ${config.border} rounded-2xl p-4 mx-4 mt-3 shadow-lg`}
+      className={`mx-4 mt-3 rounded-2xl overflow-hidden transition-all duration-500 ease-out ${
+        visible ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95'
+      } ${s.pulse}`}
       role="alert"
       aria-live="assertive"
     >
-      <div className="flex items-start gap-3">
-        {/* Ícone */}
-        <div className={`p-2 rounded-xl ${config.iconBg} text-white shrink-0`}>
-          <Icon size={20} />
-        </div>
+      <div className={`relative backdrop-blur-xl bg-gradient-to-br ${s.gradient} ${s.glow} p-4 text-white`}>
+        {/* Brilho no topo */}
+        <div className="absolute top-0 left-8 right-8 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
 
-        {/* Conteúdo */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-black uppercase tracking-widest opacity-70">
-              {config.label}
-            </span>
+        <div className="flex items-start gap-3">
+          {/* Ícone 3D */}
+          <div className={`p-2.5 rounded-xl ${s.iconBg} shadow-lg ${isHighRisk ? 'animate-float' : ''}`}>
+            <Icon size={22} strokeWidth={2.5} />
           </div>
-          <h4 className="text-sm font-black leading-tight">{title}</h4>
-          <p className="text-xs font-semibold opacity-80 mt-1 line-clamp-3">
-            {message}
-          </p>
 
-          {/* Botões de ação */}
-          <div className="flex items-center gap-2 mt-3">
-            <button
-              onClick={() => {
-                dismissAlert(alertId);
-                setDismissed(true);
-              }}
-              className="px-4 py-1.5 text-[11px] font-black bg-white/80 dark:bg-black/30 rounded-full active:scale-95 transition-all flex items-center gap-1.5"
-            >
-              <X size={12} /> Entendi
-            </button>
-            <button
-              onClick={requestNotificationPermission}
-              className="px-4 py-1.5 text-[11px] font-black bg-white/80 dark:bg-black/30 rounded-full active:scale-95 transition-all flex items-center gap-1.5"
-            >
-              {Notification.permission === 'granted' ? (
-                <><Bell size={12} /> Alertas ativos</>
-              ) : (
-                <><BellOff size={12} /> Ativar alertas</>
-              )}
-            </button>
+          {/* Conteúdo */}
+          <div className="flex-1 min-w-0">
+            <span className="text-[9px] font-black uppercase tracking-widest opacity-70">
+              {s.label}
+            </span>
+            <h4 className="text-sm font-black leading-tight mt-0.5">{title}</h4>
+            <p className="text-xs font-semibold opacity-90 mt-1 line-clamp-3">{message}</p>
+
+            {/* Botões vidro */}
+            <div className="flex items-center gap-2 mt-3">
+              <button
+                onClick={() => {
+                  dismissAlert(alertId);
+                  setDismissed(true);
+                }}
+                className="px-4 py-2 text-[11px] font-black bg-white/20 hover:bg-white/30 rounded-full active:scale-95 transition-all flex items-center gap-1.5 backdrop-blur"
+              >
+                <X size={12} /> Entendi
+              </button>
+              <button
+                onClick={requestNotificationPermission}
+                className="px-4 py-2 text-[11px] font-black bg-white/20 hover:bg-white/30 rounded-full active:scale-95 transition-all flex items-center gap-1.5 backdrop-blur"
+              >
+                {Notification.permission === 'granted' ? (
+                  <><Bell size={12} /> Alertas ativos</>
+                ) : (
+                  <><BellOff size={12} /> Ativar alertas</>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

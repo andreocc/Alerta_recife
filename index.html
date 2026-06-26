@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
-    <meta name="theme-color" content="#2563eb">
+    <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Prevenção Inteligente de Alagamentos em Recife">
@@ -18,6 +18,34 @@
           extend: {
             colors: {
               primary: '#2563eb',
+              glass: {
+                light: 'rgba(255,255,255,0.75)',
+                dark: 'rgba(15,23,42,0.75)',
+              }
+            },
+            animation: {
+              'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+              'float': 'float 3s ease-in-out infinite',
+              'shimmer': 'shimmer 2s linear infinite',
+              'height-grow': 'height-grow 0.6s ease-out forwards',
+            },
+            keyframes: {
+              'pulse-glow': {
+                '0%, 100%': { boxShadow: '0 0 20px rgba(239,68,68,0.3), 0 0 60px rgba(239,68,68,0.1)' },
+                '50%': { boxShadow: '0 0 40px rgba(239,68,68,0.6), 0 0 100px rgba(239,68,68,0.3)' },
+              },
+              'float': {
+                '0%, 100%': { transform: 'translateY(0px)' },
+                '50%': { transform: 'translateY(-6px)' },
+              },
+              'shimmer': {
+                '0%': { backgroundPosition: '-200% 0' },
+                '100%': { backgroundPosition: '200% 0' },
+              },
+              'height-grow': {
+                '0%': { height: '0%' },
+                '100%': { height: 'var(--target-height)' },
+              },
             }
           }
         }
@@ -25,29 +53,189 @@
     </script>
 
     <!-- Fontes -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 
     <!-- Leaflet CSS (mapa) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
     <style>
-        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        /* ── Base ──────────────────────────────── */
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Leaflet ──────────────────────────── */
         .leaflet-container { width: 100%; height: 100%; border-radius: 0; z-index: 1; }
         .leaflet-tile-pane { filter: grayscale(0.2) contrast(1.1) brightness(1); }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @media (prefers-color-scheme: dark) {
             .leaflet-tile-pane { filter: invert(100%) hue-rotate(180deg) brightness(0.95) contrast(0.9); }
-            body { background-color: #0f172a; color: white; }
         }
-        /* Bottom Sheet Animation */
-        .bottom-sheet-enter { transform: translateY(100%); }
-        .bottom-sheet-enter-active { transform: translateY(0); transition: transform 300ms ease-out; }
-        /* Safe area padding para iPhones com notch */
-        .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+
+        /* ── Scrollbar hide ──────────────────── */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* ── Safe area (iPhone notch) ────────── */
+        .pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 16px) + 8px); }
+        .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+
+        /* ── Keyframes ───────────────────────── */
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(239,68,68,0.3), 0 0 60px rgba(239,68,68,0.1); }
+            50%      { box-shadow: 0 0 40px rgba(239,68,68,0.6), 0 0 100px rgba(239,68,68,0.3); }
+        }
+        @keyframes pulse-glow-purple {
+            0%, 100% { box-shadow: 0 0 20px rgba(147,51,234,0.3), 0 0 60px rgba(147,51,234,0.1); }
+            50%      { box-shadow: 0 0 40px rgba(147,51,234,0.6), 0 0 100px rgba(147,51,234,0.3); }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50%      { transform: translateY(-6px); }
+        }
+        @keyframes shimmer {
+            0%   { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        @keyframes height-grow {
+            0%   { height: 0%; }
+            100% { height: var(--target-height); }
+        }
+        @keyframes slide-up {
+            0%   { transform: translateY(100%); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes fade-in {
+            0%   { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        /* ── Animações utilitárias ──────────── */
+        .animate-pulse-glow {
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+        .animate-pulse-glow-purple {
+            animation: pulse-glow-purple 2s ease-in-out infinite;
+        }
+        .animate-float {
+            animation: float 3s ease-in-out infinite;
+        }
+        .animate-shimmer {
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            background-size: 200% 100%;
+            animation: shimmer 2s linear infinite;
+        }
+        .animate-height-grow {
+            animation: height-grow 0.6s ease-out forwards;
+        }
+        .animate-slide-up {
+            animation: slide-up 0.4s ease-out forwards;
+        }
+        .animate-fade-in {
+            animation: fade-in 0.5s ease-out forwards;
+        }
+
+        /* ── Vidro (Glassmorphism) ──────────── */
+        .glass {
+            background: rgba(255,255,255,0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .glass-dark {
+            background: rgba(15,23,42,0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        @media (prefers-color-scheme: dark) {
+            .glass {
+                background: rgba(15,23,42,0.75);
+                border-color: rgba(255,255,255,0.08);
+            }
+        }
+
+        /* ── Sombra 3D ──────────────────────── */
+        .shadow-3d {
+            box-shadow:
+                0 1px 2px rgba(0,0,0,0.04),
+                0 4px 16px rgba(0,0,0,0.06),
+                0 8px 32px rgba(0,0,0,0.06);
+        }
+        .shadow-3d-lg {
+            box-shadow:
+                0 2px 4px rgba(0,0,0,0.04),
+                0 8px 24px rgba(0,0,0,0.08),
+                0 16px 48px rgba(0,0,0,0.08);
+        }
+        @media (prefers-color-scheme: dark) {
+            .shadow-3d {
+                box-shadow:
+                    0 1px 2px rgba(0,0,0,0.2),
+                    0 4px 16px rgba(0,0,0,0.3),
+                    0 8px 32px rgba(0,0,0,0.4);
+            }
+            .shadow-3d-lg {
+                box-shadow:
+                    0 2px 4px rgba(0,0,0,0.2),
+                    0 8px 24px rgba(0,0,0,0.4),
+                    0 16px 48px rgba(0,0,0,0.5);
+            }
+        }
+
+        /* ── Gradientes de risco ───────────── */
+        .risk-gradient-extremo { background: linear-gradient(135deg, #9333ea, #c026d3, #7c3aed); }
+        .risk-gradient-critico { background: linear-gradient(135deg, #ef4444, #f97316); }
+        .risk-gradient-alto    { background: linear-gradient(135deg, #f97316, #eab308); }
+        .risk-gradient-medio   { background: linear-gradient(135deg, #eab308, #facc15); }
+        .risk-gradient-baixo   { background: linear-gradient(135deg, #10b981, #14b8a6); }
+
+        .risk-text-extremo { background: linear-gradient(135deg, #9333ea, #c026d3); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .risk-text-critico { background: linear-gradient(135deg, #ef4444, #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .risk-text-alto    { background: linear-gradient(135deg, #f97316, #eab308); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .risk-text-medio   { background: linear-gradient(135deg, #eab308, #facc15); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .risk-text-baixo   { background: linear-gradient(135deg, #10b981, #14b8a6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+        /* ── Background dinâmico ────────────── */
+        .bg-radial-subtle {
+            background: radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.08) 0%, transparent 60%),
+                        radial-gradient(ellipse at 85% 100%, rgba(16,185,129,0.05) 0%, transparent 50%);
+        }
+        @media (prefers-color-scheme: dark) {
+            .bg-radial-subtle {
+                background: radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.12) 0%, transparent 60%),
+                            radial-gradient(ellipse at 85% 100%, rgba(16,185,129,0.08) 0%, transparent 50%);
+            }
+        }
+
+        /* ── Active nav pill ────────────────── */
+        .nav-pill-active {
+            background: #2563eb;
+            box-shadow: 0 4px 20px rgba(37,99,235,0.4);
+            transform: scale(1.1);
+        }
+
+        /* ── Ripple effect ──────────────────── */
+        .ripple {
+            position: relative;
+            overflow: hidden;
+        }
+        .ripple:after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, rgba(255,255,255,0.3) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .ripple:active:after {
+            opacity: 1;
+            transition: opacity 0s;
+        }
     </style>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-500">
     <div id="root"></div>
     <script type="module" src="/src/index.tsx"></script>
 </body>
