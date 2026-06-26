@@ -85,23 +85,27 @@ describe('riskEngine — thresholds', () => {
       expect(floodRisk('médio', 'médio')).toBe('baixo');
     });
 
-    it('alto + baixo = médio (chuva forte mas sem maré — escoa)', () => {
+    it('alto + baixo = médio (chuva forte mas maré baixa — escoa)', () => {
       expect(floodRisk('alto', 'baixo')).toBe('médio');
     });
 
-    it('baixo + alto = médio (maré alta sem chuva — pouco impacto)', () => {
-      expect(floodRisk('baixo', 'alto')).toBe('médio');
+    it('baixo + alto = baixo (SEM CHUVA = SEM ALAGAMENTO)', () => {
+      expect(floodRisk('baixo', 'alto')).toBe('baixo');
+    });
+
+    it('baixo + extremo = baixo (sem chuva, maré não importa)', () => {
+      expect(floodRisk('baixo', 'extremo')).toBe('baixo');
     });
 
     it('alto + alto = crítico (AMBOS altos — combinação perigosa!)', () => {
       expect(floodRisk('alto', 'alto')).toBe('crítico');
     });
 
-    it('crítico + alto = crítico (crítico index 3 + bump 1 = 3 = crítico)', () => {
+    it('crítico + alto = crítico (base=alto(2) + 1 = 3 = crítico)', () => {
       expect(floodRisk('crítico', 'alto')).toBe('crítico');
     });
 
-    it('alto + crítico = crítico (simétrico)', () => {
+    it('alto + crítico = crítico (simétrico, base=alto(2) + 1 = crítico)', () => {
       expect(floodRisk('alto', 'crítico')).toBe('crítico');
     });
 
@@ -113,8 +117,20 @@ describe('riskEngine — thresholds', () => {
       expect(floodRisk('crítico', 'baixo')).toBe('alto');
     });
 
-    it('baixo + crítico = alto (maré crítica sem chuva — refluxo significativo)', () => {
-      expect(floodRisk('baixo', 'crítico')).toBe('alto');
+    it('médio + crítico = médio (chuva média + maré muito alta)', () => {
+      expect(floodRisk('médio', 'crítico')).toBe('médio');
+    });
+
+    it('médio + alto = baixo (chuva média + maré alta não é suficiente)', () => {
+      expect(floodRisk('médio', 'alto')).toBe('baixo');
+    });
+
+    it('médio + baixo = baixo (chuva média + maré baixa)', () => {
+      expect(floodRisk('médio', 'baixo')).toBe('baixo');
+    });
+
+    it('baixo + crítico = baixo (SEM CHUVA = SEM ALAGAMENTO, maré não importa)', () => {
+      expect(floodRisk('baixo', 'crítico')).toBe('baixo');
     });
   });
 

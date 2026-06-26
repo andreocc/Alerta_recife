@@ -68,45 +68,46 @@ function precipitationAccumulatedToRisk(totalMm: number): RiskLevel {
 const LEVEL_ORDER: RiskLevel[] = ['baixo', 'médio', 'alto', 'crítico', 'extremo'];
 
 /**
- * Risco de ALAGAMENTO: requer a COMBINAÇÃO de chuva + maré alta.
+ * Risco de ALAGAMENTO: a CHUVA é o fator primário. A maré é AGRAVANTE.
  *
- * Em Recife (cidade abaixo do nível do mar), o alagamento ocorre
- * quando a chuva forte coincide com a maré alta — a maré impede
- * o escoamento da água pelos canais, causando refluxo e transbordamento.
+ * Em Recife (cidade abaixo do nível do mar), o alagamento ocorre quando
+ * chove forte E a maré está alta — a maré impede o escoamento pelos canais.
  *
- * - Chuva sem maré alta: a água escoa, risco baixo/médio
- * - Maré alta sem chuva: não há água acumulando, risco baixo
- * - Chuva + maré alta: SEM os dois fatores, o risco dispara
+ * - Sem chuva (baixo): NÃO TEM ALAGAMENTO, independente da maré
+ * - Chuva média: só alaga se maré estiver MUITO alta (crítico+)
+ * - Chuva forte + maré alta: COMBINAÇÃO PERIGOSA, sobe 1 nível
+ * - Chuva forte + maré baixa: água escoa, risco reduzido
  */
 function floodRisk(rain: RiskLevel, tide: RiskLevel): RiskLevel {
   const rainIdx = LEVEL_ORDER.indexOf(rain);
   const tideIdx = LEVEL_ORDER.indexOf(tide);
 
-  // Se algum fator é baixo, não há combinação perigosa
-  if (rainIdx <= 1 && tideIdx <= 1) {
-    // Ambos baixo ou médio → sem alagamento significativo
+  // ═══ SEM CHUVA = SEM ALAGAMENTO ═══
+  if (rainIdx <= 0) {
+    // Chuva baixa → não tem água acumulando, maré não importa
     return 'baixo';
   }
 
-  // Pelo menos um fator é alto ou pior
-  if (rainIdx >= 2 && tideIdx >= 2) {
-    // AMBOS ≥ alto: combinação perigosa
-    const minIdx = Math.min(rainIdx, tideIdx);
-    // Sobe 1 nível adicional pela combinação
-    return LEVEL_ORDER[Math.min(minIdx + 1, 4)];
+  // ═══ CHUVA MÉDIA ═══
+  if (rainIdx === 1) {
+    // Só alaga se a maré estiver MUITO alta (crítico ou extremo)
+    if (tideIdx >= 3) return 'médio';
+    return 'baixo';
   }
 
-  if (rainIdx >= 2 && tideIdx < 2) {
-    // Chuva forte mas maré baixa → escoa parcialmente
+  // ═══ CHUVA ALTA OU PIOR ═══
+  if (rainIdx >= 2) {
+    if (tideIdx >= 2) {
+      // AMBOS ≥ alto: COMBINAÇÃO PERIGOSA — maré bloqueia escoamento
+      // Usa o MENOR índice como base (simétrico), sobe 1
+      const base = Math.min(rainIdx, tideIdx);
+      return LEVEL_ORDER[Math.min(base + 1, 4)];
+    }
+    // Maré baixa/média → água escoa, risco reduzido
     return LEVEL_ORDER[Math.min(rainIdx - 1, 4)];
   }
 
-  if (tideIdx >= 2 && rainIdx < 2) {
-    // Maré alta mas sem chuva → refluxo leve, pouco impacto
-    return LEVEL_ORDER[Math.max(tideIdx - 1, 1)];
-  }
-
-  return 'médio';
+  return 'baixo';
 }
 
 /**
