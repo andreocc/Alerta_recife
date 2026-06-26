@@ -67,21 +67,60 @@ function precipitationAccumulatedToRisk(totalMm: number): RiskLevel {
 // ── Levels ordered ─────────────────────────────────────────
 const LEVEL_ORDER: RiskLevel[] = ['baixo', 'médio', 'alto', 'crítico', 'extremo'];
 
-// ── Risco combinado ───────────────────────────────────────
-function combinedRisk(meteo: RiskLevel, hydro: RiskLevel, geo: RiskLevel): RiskLevel {
-  const meteoIdx = LEVEL_ORDER.indexOf(meteo);
-  const hydroIdx = LEVEL_ORDER.indexOf(hydro);
-  const geoIdx = LEVEL_ORDER.indexOf(geo);
+/**
+ * Risco de ALAGAMENTO: requer a COMBINAÇÃO de chuva + maré alta.
+ *
+ * Em Recife (cidade abaixo do nível do mar), o alagamento ocorre
+ * quando a chuva forte coincide com a maré alta — a maré impede
+ * o escoamento da água pelos canais, causando refluxo e transbordamento.
+ *
+ * - Chuva sem maré alta: a água escoa, risco baixo/médio
+ * - Maré alta sem chuva: não há água acumulando, risco baixo
+ * - Chuva + maré alta: SEM os dois fatores, o risco dispara
+ */
+function floodRisk(rain: RiskLevel, tide: RiskLevel): RiskLevel {
+  const rainIdx = LEVEL_ORDER.indexOf(rain);
+  const tideIdx = LEVEL_ORDER.indexOf(tide);
 
-  let combined = Math.max(meteoIdx, hydroIdx, geoIdx);
-
-  // Se pelo menos dois fatores >= 'médio', incrementa
-  const mediumOrAbove = [meteoIdx, hydroIdx, geoIdx].filter(i => i >= 2).length;
-  if (mediumOrAbove >= 2) {
-    combined = Math.min(combined + 1, 4);
+  // Se algum fator é baixo, não há combinação perigosa
+  if (rainIdx <= 1 && tideIdx <= 1) {
+    // Ambos baixo ou médio → sem alagamento significativo
+    return 'baixo';
   }
 
-  return LEVEL_ORDER[combined];
+  // Pelo menos um fator é alto ou pior
+  if (rainIdx >= 2 && tideIdx >= 2) {
+    // AMBOS ≥ alto: combinação perigosa
+    const minIdx = Math.min(rainIdx, tideIdx);
+    // Sobe 1 nível adicional pela combinação
+    return LEVEL_ORDER[Math.min(minIdx + 1, 4)];
+  }
+
+  if (rainIdx >= 2 && tideIdx < 2) {
+    // Chuva forte mas maré baixa → escoa parcialmente
+    return LEVEL_ORDER[Math.min(rainIdx - 1, 4)];
+  }
+
+  if (tideIdx >= 2 && rainIdx < 2) {
+    // Maré alta mas sem chuva → refluxo leve, pouco impacto
+    return LEVEL_ORDER[Math.max(tideIdx - 1, 1)];
+  }
+
+  return 'médio';
+}
+
+/**
+ * Risco combinado geral: alagamento + deslizamento (geotécnico).
+ *
+ * Deslizamento é independente de maré — depende de chuva acumulada
+ * em áreas de morro (Casa Amarela, Nova Descoberta, etc.).
+ */
+function combinedRisk(meteo: RiskLevel, hydro: RiskLevel, geo: RiskLevel): RiskLevel {
+  const flood = floodRisk(meteo, hydro);
+  const floodIdx = LEVEL_ORDER.indexOf(flood);
+  const geoIdx = LEVEL_ORDER.indexOf(geo);
+
+  return LEVEL_ORDER[Math.max(floodIdx, geoIdx)];
 }
 
 // ── Templates de resumo por nível de risco ──────────────────
@@ -101,12 +140,24 @@ interface SummaryTemplate {
 
 function getTemplate(
   level: RiskLevel,
+  meteoLevel: RiskLevel,
+  hydroLevel: RiskLevel,
   maxPrecip: number,
   maxTide: number,
   peakHour: string,
   neighborhoods: string[]
 ): SummaryTemplate {
   const bairros = neighborhoods.slice(0, 5).join(', ');
+  const rainHigh = LEVEL_ORDER.indexOf(meteoLevel) >= 2;
+  const tideHigh = LEVEL_ORDER.indexOf(hydroLevel) >= 2;
+
+  const riskCause = rainHigh && tideHigh
+    ? 'Chuva forte COMBINADA com maré alta — situação crítica para alagamentos'
+    : rainHigh
+      ? 'Chuva forte (maré baixa — escoamento parcial)'
+      : tideHigh
+        ? 'Maré alta (sem chuva significativa — risco limitado)'
+        : 'Condições estáveis';
 
   const templates: Record<RiskLevel, SummaryTemplate> = {
     baixo: {
@@ -126,7 +177,11 @@ function getTemplate(
     },
 
     médio: {
-      what: `Atenção, recifense! Previsão de até ${maxPrecip}mm de chuva. Podem ocorrer alagamentos pontuais em áreas baixas, especialmente se coincidir com a maré alta prevista de ${maxTide}m.`,
+      what: rainHigh && tideHigh
+        ? `Atenção, recifense! Chuva de ${maxPrecip}mm combinada com maré de ${maxTide}m. Podem ocorrer alagamentos pontuais em áreas baixas.`
+        : rainHigh
+          ? `Chuva de ${maxPrecip}mm prevista. Sem maré alta, o escoamento deve ocorrer, mas fique atento a pontos baixos.`
+          : `Maré de ${maxTide}m prevista, sem chuva significativa. Risco limitado, mas atenção em áreas muito baixas.`,
       where: `Fique de olho em: ${bairros}.`,
       actions: [
         'Evite passar por ruas alagadas — mesmo com carro alto',
@@ -135,8 +190,10 @@ function getTemplate(
         'Separe documentos e itens importantes em local alto',
       ],
       title: 'Atenção: Possibilidade de Alagamentos',
-      message: `Chuva de ${maxPrecip}mm e maré de ${maxTide}m — fique atento!`,
-      technicalDetails: `Precipitação máx: ${maxPrecip}mm. Maré máx: ${maxTide}m às ${peakHour}. Risco moderado de alagamentos pontuais em áreas de baixada.`,
+      message: rainHigh && tideHigh
+        ? `Chuva de ${maxPrecip}mm e maré de ${maxTide}m — fique atento!`
+        : `Possibilidade de alagamentos pontuais — acompanhe a previsão.`,
+      technicalDetails: `${riskCause}. Precipitação máx: ${maxPrecip}mm. Maré máx: ${maxTide}m às ${peakHour}.`,
       generalRecs: [
         'Evite áreas alagadas',
         'Mantenha-se informado pelos canais oficiais',
@@ -146,7 +203,9 @@ function getTemplate(
     },
 
     alto: {
-      what: `Alerta importante! Chuva forte prevista: até ${maxPrecip}mm. Com maré de ${maxTide}m prevista para as ${peakHour}, há ALTO RISCO de alagamentos em múltiplos bairros. A combinação de chuva + maré alta pode causar transbordamento de canais.`,
+      what: rainHigh && tideHigh
+        ? `Alerta importante! Chuva forte de ${maxPrecip}mm COMBINADA com maré de ${maxTide}m às ${peakHour}. Esta combinação é perigosa: a maré alta impede o escoamento, causando transbordamento de canais. ALTO RISCO de alagamentos.`
+        : `Alerta! ${rainHigh ? `Chuva forte de ${maxPrecip}mm` : `Maré alta de ${maxTide}m`}. ${rainHigh && !tideHigh ? 'A água pode escoar lentamente. Fique atento a pontos baixos.' : 'Refluxo nos canais possivel. Evite áreas baixas.'}`,
       where: `Áreas críticas: ${bairros} e bairros próximos a canais. Evite essas regiões!`,
       actions: [
         'NÃO enfrente ruas alagadas — a força da água pode arrastar veículos',
@@ -156,8 +215,10 @@ function getTemplate(
         'Tenha uma mochila de emergência pronta com água e documentos',
       ],
       title: 'ALERTA: Alto Risco de Alagamentos em Recife',
-      message: `ATENÇÃO: ${maxPrecip}mm de chuva + maré de ${maxTide}m. Risco alto de alagamento!`,
-      technicalDetails: `Precipitação máx: ${maxPrecip}mm. Maré máx: ${maxTide}m às ${peakHour}. Condições para alagamentos generalizados em áreas de baixada. Canais podem transbordar. Ventos de até 40km/h possíveis.`,
+      message: rainHigh && tideHigh
+        ? `ATENÇÃO: ${maxPrecip}mm de chuva + maré de ${maxTide}m. Risco alto de alagamento!`
+        : `Alerta de alagamento: ${rainHigh ? 'chuva forte' : 'maré alta'}. Evite áreas baixas!`,
+      technicalDetails: `${riskCause}. Precipitação máx: ${maxPrecip}mm. Maré máx: ${maxTide}m às ${peakHour}. Canais podem transbordar.`,
       generalRecs: [
         'Evite deslocamentos',
         'Procure locais elevados se estiver em área de risco',
@@ -174,7 +235,9 @@ function getTemplate(
     },
 
     crítico: {
-      what: `PERIGO REAL! Chuva torrencial de até ${maxPrecip}mm prevista. Maré de ${maxTide}m às ${peakHour}. Esta combinação é EXTREMAMENTE PERIGOSA e pode causar alagamentos severos como os de maio/2022. Não espere — aja agora para proteger sua vida!`,
+      what: rainHigh && tideHigh
+        ? `PERIGO REAL! Chuva torrencial de até ${maxPrecip}mm COMBINADA com maré de ${maxTide}m às ${peakHour}. Esta combinação é EXTREMAMENTE PERIGOSA — a água NÃO VAI ESCOAR. Alagamentos severos como os de maio/2022 são prováveis. Não espere — aja agora para proteger sua vida!`
+        : `PERIGO! ${rainHigh ? `Chuva torrencial de ${maxPrecip}mm` : `Maré excepcional de ${maxTide}m`}. ${rainHigh ? 'Mesmo com maré baixa, este volume de chuva é muito perigoso.' : 'Mesmo sem chuva, esta altura de maré causa refluxo severo.'}`,
       where: `EVACUE áreas baixas: ${bairros}. Estas regiões DEVEM ser evacuadas. A água pode subir mais de 1 metro em minutos.`,
       actions: [
         'EVACUE áreas de risco IMEDIATAMENTE — sua vida em primeiro lugar',
@@ -185,7 +248,7 @@ function getTemplate(
       ],
       title: 'PERIGO: Alagamento Severo Iminente',
       message: `URGENTE: ${maxPrecip}mm de chuva + maré ${maxTide}m. EVACUE áreas baixas!`,
-      technicalDetails: `Precipitação máx: ${maxPrecip}mm. Maré máx: ${maxTide}m às ${peakHour}. Condições similares ao evento de maio/2022. Alagamentos generalizados esperados. Canais com alta probabilidade de transbordamento. Rajadas de vento acima de 50km/h possíveis.`,
+      technicalDetails: `${riskCause}. Precipitação máx: ${maxPrecip}mm. Maré máx: ${maxTide}m às ${peakHour}. Condições similares ao evento de maio/2022. Alagamentos generalizados esperados.`,
       generalRecs: [
         'EVACUAÇÃO IMEDIATA de áreas de risco',
         'Contate a Defesa Civil: 199',
@@ -202,7 +265,9 @@ function getTemplate(
     },
 
     extremo: {
-      what: `EMERGÊNCIA! Chuva catastrófica de até ${maxPrecip}mm prevista, com maré de ${maxTide}m. Recife está sob AMEAÇA EXTREMA de alagamento. Esta é uma situação de risco de vida — todas as áreas abaixo do nível do mar estão em perigo. Aja AGORA!`,
+      what: rainHigh && tideHigh
+        ? `EMERGÊNCIA! Chuva catastrófica de até ${maxPrecip}mm COMBINADA com maré de ${maxTide}m. Recife está sob AMEAÇA EXTREMA — a água NÃO VAI ESCOAR. Esta é uma situação de risco de vida. Todas as áreas abaixo do nível do mar estão em perigo. Aja AGORA!`
+        : `EMERGÊNCIA! ${rainHigh ? `Chuva catastrófica de ${maxPrecip}mm` : `Maré excepcional de ${maxTide}m`}. Risco extremo para a população. Evacue IMEDIATAMENTE!`,
       where: `TODAS as áreas de baixada em Recife: ${bairros}. Evacuação em massa necessária.`,
       actions: [
         'EVACUE IMEDIATAMENTE — esta é uma emergência com risco de vida',
@@ -213,7 +278,7 @@ function getTemplate(
       ],
       title: 'EMERGÊNCIA: Catástrofe por Alagamento em Recife',
       message: `EMERGÊNCIA: Chuva de ${maxPrecip}mm + maré ${maxTide}m. EVACUE JÁ! Risco de vida!`,
-      technicalDetails: `Precipitação máx: ${maxPrecip}mm. Maré máx: ${maxTide}m às ${peakHour}. Evento extremo com potencial catastrófico. Alagamentos generalizados, transbordamento de canais e rios, deslizamentos em encostas. Ventos acima de 60km/h. Situação comparável aos piores eventos históricos de Recife.`,
+      technicalDetails: `${riskCause}. Precipitação máx: ${maxPrecip}mm. Maré máx: ${maxTide}m às ${peakHour}. Evento extremo com potencial catastrófico. Alagamentos generalizados, transbordamento de canais e rios, deslizamentos em encostas.`,
       generalRecs: [
         'EVACUAÇÃO EM MASSA',
         'Emergência: 193 (Bombeiros)',
@@ -584,7 +649,7 @@ export async function analyzeRisk(
   // ── Geração de conteúdo ────────────────────────────────
 
   const neighborhoods = getAffectedNeighborhoods(overallLevel);
-  const template = getTemplate(overallLevel, maxPrecipitation, maxTideHeight, peakTide.time, neighborhoods);
+  const template = getTemplate(overallLevel, meteoLevel, hydroLevel, maxPrecipitation, maxTideHeight, peakTide.time, neighborhoods);
 
   // Atualiza zonas de risco com nível dinâmico
   const riskZones: RiskZone[] = RECIFE_RISK_ZONES.map(zone => ({
@@ -652,6 +717,7 @@ export {
   precipitationToRisk,
   tideToRisk,
   precipitationAccumulatedToRisk,
+  floodRisk,
   combinedRisk,
   getTemplate,
   RECIFE_RISK_ZONES,

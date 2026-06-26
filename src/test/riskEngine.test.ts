@@ -3,6 +3,7 @@ import {
   precipitationToRisk,
   tideToRisk,
   precipitationAccumulatedToRisk,
+  floodRisk,
   combinedRisk,
   getTemplate,
 } from '../services/riskEngine';
@@ -66,47 +67,86 @@ describe('riskEngine — thresholds', () => {
     });
   });
 
-  // ── Risco combinado ─────────────────────────
+  // ── Risco de alagamento (chuva + maré) ─────
+  describe('floodRisk', () => {
+    it('baixo + baixo = baixo', () => {
+      expect(floodRisk('baixo', 'baixo')).toBe('baixo');
+    });
+
+    it('médio + baixo = baixo (sem combinação perigosa)', () => {
+      expect(floodRisk('médio', 'baixo')).toBe('baixo');
+    });
+
+    it('baixo + médio = baixo (sem combinação perigosa)', () => {
+      expect(floodRisk('baixo', 'médio')).toBe('baixo');
+    });
+
+    it('médio + médio = baixo (ambos médios não é suficiente)', () => {
+      expect(floodRisk('médio', 'médio')).toBe('baixo');
+    });
+
+    it('alto + baixo = médio (chuva forte mas sem maré — escoa)', () => {
+      expect(floodRisk('alto', 'baixo')).toBe('médio');
+    });
+
+    it('baixo + alto = médio (maré alta sem chuva — pouco impacto)', () => {
+      expect(floodRisk('baixo', 'alto')).toBe('médio');
+    });
+
+    it('alto + alto = crítico (AMBOS altos — combinação perigosa!)', () => {
+      expect(floodRisk('alto', 'alto')).toBe('crítico');
+    });
+
+    it('crítico + alto = crítico (crítico index 3 + bump 1 = 3 = crítico)', () => {
+      expect(floodRisk('crítico', 'alto')).toBe('crítico');
+    });
+
+    it('alto + crítico = crítico (simétrico)', () => {
+      expect(floodRisk('alto', 'crítico')).toBe('crítico');
+    });
+
+    it('extremo + extremo = extremo (cap)', () => {
+      expect(floodRisk('extremo', 'extremo')).toBe('extremo');
+    });
+
+    it('crítico + baixo = alto (chuva crítica mas maré baixa — escoa parcial)', () => {
+      expect(floodRisk('crítico', 'baixo')).toBe('alto');
+    });
+
+    it('baixo + crítico = alto (maré crítica sem chuva — refluxo significativo)', () => {
+      expect(floodRisk('baixo', 'crítico')).toBe('alto');
+    });
+  });
+
+  // ── Risco combinado geral ────────────────────
   describe('combinedRisk', () => {
-    it('baixo + baixo + baixo = baixo', () => {
+    it('alagamento baixo + geo baixo = baixo', () => {
       expect(combinedRisk('baixo', 'baixo', 'baixo')).toBe('baixo');
     });
 
-    it('médio + baixo + baixo = médio (max)', () => {
-      expect(combinedRisk('médio', 'baixo', 'baixo')).toBe('médio');
-    });
-
-    it('alto + médio + baixo = alto (max, só 1 ≥ alto, sem bump)', () => {
-      expect(combinedRisk('alto', 'médio', 'baixo')).toBe('alto');
-    });
-
-    it('alto + alto + baixo = crítico (2+ ≥ alto, incrementa)', () => {
+    it('alagamento crítico (chuva+maré) + geo baixo = crítico', () => {
       expect(combinedRisk('alto', 'alto', 'baixo')).toBe('crítico');
     });
 
-    it('alto + alto + alto = crítico (inc, cap não atingido)', () => {
-      expect(combinedRisk('alto', 'alto', 'alto')).toBe('crítico');
+    it('alagamento médio + geo alto (deslizamento) = alto', () => {
+      expect(combinedRisk('alto', 'baixo', 'alto')).toBe('alto');
     });
 
-    it('extremo + extremo + extremo = extremo (cap)', () => {
-      expect(combinedRisk('extremo', 'extremo', 'extremo')).toBe('extremo');
-    });
-
-    it('crítico + médio + baixo = crítico (max, 1 médio não incrementa)', () => {
-      expect(combinedRisk('crítico', 'médio', 'baixo')).toBe('crítico');
+    it('alagamento extremo + geo extremo = extremo', () => {
+      expect(combinedRisk('crítico', 'alto', 'extremo')).toBe('extremo');
     });
   });
 });
 
 describe('riskEngine — templates', () => {
   it('gera template para nível baixo', () => {
-    const t = getTemplate('baixo', 5, 1.2, '06:00', []);
+    const t = getTemplate('baixo', 'baixo', 'baixo', 5, 1.2, '06:00', []);
     expect(t.title).toContain('Normalidade');
     expect(t.actions).toHaveLength(3);
   });
 
-  it('gera template para nível alto com bairros', () => {
-    const t = getTemplate('alto', 45, 2.3, '14:00', ['Boa Viagem', 'Centro']);
+  it('gera template para nível alto com chuva+maré', () => {
+    const t = getTemplate('alto', 'alto', 'alto', 45, 2.3, '14:00', ['Boa Viagem', 'Centro']);
     expect(t.title).toContain('ALERTA');
     expect(t.where).toContain('Boa Viagem');
     expect(t.what).toContain('45mm');
@@ -114,17 +154,31 @@ describe('riskEngine — templates', () => {
     expect(t.actions.length).toBeGreaterThanOrEqual(4);
   });
 
+  it('gera template para nível alto com só chuva (sem maré)', () => {
+    const t = getTemplate('alto', 'alto', 'baixo', 45, 1.2, '14:00', ['Boa Viagem']);
+    expect(t.what).toContain('45mm');
+    expect(t.what).not.toContain('COMBINADA');
+  });
+
   it('gera template para nível extremo', () => {
-    const t = getTemplate('extremo', 120, 3.2, '22:00', ['Boa Viagem']);
+    const t = getTemplate('extremo', 'extremo', 'extremo', 120, 3.2, '22:00', ['Boa Viagem']);
     expect(t.title).toContain('EMERGÊNCIA');
     expect(t.message).toContain('EVACUE');
     expect(t.actions.length).toBeGreaterThanOrEqual(5);
   });
 
   it('interpola dados corretamente (mm, m, hora)', () => {
-    const t = getTemplate('médio', 22, 1.8, '08:00', ['Pina']);
+    const t = getTemplate('médio', 'médio', 'médio', 22, 1.8, '08:00', ['Pina']);
     expect(t.technicalDetails).toContain('22mm');
     expect(t.technicalDetails).toContain('1.8m');
     expect(t.technicalDetails).toContain('08:00');
+  });
+
+  it('template menciona combinação apenas quando ambos altos', () => {
+    const comCombinacao = getTemplate('alto', 'alto', 'alto', 40, 2.5, '10:00', ['Centro']);
+    expect(comCombinacao.what).toContain('COMBINADA');
+
+    const semCombinacao = getTemplate('alto', 'alto', 'baixo', 40, 1.0, '10:00', ['Centro']);
+    expect(semCombinacao.what).not.toContain('COMBINADA');
   });
 });
