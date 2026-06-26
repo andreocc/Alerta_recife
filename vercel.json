@@ -3,7 +3,7 @@
     "outputDirectory": "dist",
     "rewrites": [
         {
-            "source": "/(.*)",
+            "source": "/((?!assets/|icons/|sw\\.js|manifest\\.webmanifest).*)",
             "destination": "/index.html"
         }
     ]
